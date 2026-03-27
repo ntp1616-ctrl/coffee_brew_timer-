@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>咖啡沖煮計時器 3.0</title>
+  <style>
+    :root {
+      --bg: #f7f1e8;
+      --card: #fffdf9;
+      --line: #e7dccd;
+      --text: #2f2822;
+      --muted: #7b6e62;
+      --accent: #7a5230;
+      --accent2: #b88a62;
+      --soft: #f3e9dc;
+      --soft2: #f9f4ee;
+      --ok: #2e7d32;
+      --warn: #b3261e;
+      --pour: #3a6fc4;
+      --bloom: #b06030;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      background: linear-gradient(180deg, #f7f1e8 0%, #f3ece3 100%);
+      color: var(--text);
+    }
+    .wrap { max-width: 860px; margin: 0 auto; padding: 16px; }
+    h1 { margin: 6px 0 4px; font-size: 28px; }
+    .sub { color: var(--muted); margin-bottom: 14px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 6px 18px rgba(94,63,34,.06);
+    }
+    .section-title { font-weight: 800; margin-bottom: 8px; font-size: 16px; }
+    .grid { display: grid; gap: 12px; }
+    .g2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .g3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .g4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    @media (max-width: 700px) {
+      .g2, .g3, .g4 { grid-template-columns: 1fr; }
+      .mode-buttons { grid-template-columns: 1fr 1fr !important; }
+    }
+    label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 6px; }
+    input, button, select {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      padding: 12px;
+      font-size: 16px;
+      background: #fff;
+      color: var(--text);
+    }
+    input[readonly] { background: #faf6f0; color: #7a6b5e; }
+    button {
+      cursor: pointer;
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+    }
+    button.secondary { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+    button.ghost { background: var(--soft); color: var(--accent); border: none; }
+    button.danger { background: #fff; color: var(--warn); border: 1px solid var(--warn); font-weight: 600; }
+    button.small { padding: 7px 14px; font-size: 14px; border-radius: 10px; width: auto; }
+    .mode-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .mode-btn { background: var(--soft); color: var(--accent); border: none; font-weight: 700; }
+    .mode-btn.active { background: var(--accent); color: #fff; box-shadow: 0 6px 14px rgba(122,82,48,.18); }
+
+    /* ── Timer ── */
+    .timer {
+      text-align: center;
+      font-size: 58px;
+      font-weight: 800;
+      line-height: 1;
+      margin: 8px 0 6px;
+      letter-spacing: 1px;
+    }
+    .stage-title { text-align: center; font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .phase-badge { text-align: center; margin-bottom: 8px; }
+    .badge {
+      display: inline-block;
+      padding: 5px 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+    .badge.pour { background: #deeaff; color: var(--pour); }
+    .badge.bloom { background: #fde8d8; color: var(--bloom); }
+    .badge.idle { background: #f0ece6; color: var(--muted); }
+    .stage-desc { text-align: center; color: var(--muted); margin-bottom: 10px; font-size: 14px; }
+    .progress {
+      height: 14px; background: #efe4d7; border-radius: 999px;
+      overflow: hidden; border: 1px solid var(--line); margin-bottom: 6px;
+    }
+    .progress.thin { height: 8px; margin-bottom: 12px; }
+    .bar { height: 100%; width: 0%; transition: width .15s linear; border-radius: 999px; }
+    .bar.overall { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+    .bar.pour-bar { background: linear-gradient(90deg, var(--pour), #6a9de0); }
+    .bar.bloom-bar { background: linear-gradient(90deg, var(--bloom), #d09060); }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .pill {
+      background: var(--soft); color: var(--accent);
+      border-radius: 999px; padding: 7px 11px; font-size: 13px; font-weight: 600;
+    }
+
+    /* ── Stage cards ── */
+    .stage-card {
+      border: 1px dashed var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: var(--soft2);
+    }
+    .stage-card.current { border: 2px solid var(--accent2); background: #fffaf3; }
+    .stage-card.done { opacity: .6; }
+    .stage-head {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px; font-weight: 700;
+    }
+    .stage-head-left { display: flex; align-items: center; gap: 8px; }
+    .stage-timing { font-size: 12px; color: var(--muted); font-weight: 400; }
+    .remove-btn {
+      background: none; border: none; color: var(--muted);
+      font-size: 20px; cursor: pointer; padding: 0 4px; width: auto; line-height: 1;
+    }
+    .remove-btn:hover { color: var(--warn); }
+    .time-split {
+      font-size: 12px; color: var(--muted); margin-top: 4px;
+      display: flex; gap: 8px;
+    }
+    .time-split span { padding: 2px 8px; border-radius: 6px; }
+    .time-split .t-pour { background: #deeaff; color: var(--pour); }
+    .time-split .t-bloom { background: #fde8d8; color: var(--bloom); }
+    .add-stage-wrap { text-align: center; margin-top: 4px; }
+
+    /* ── Recipe list ── */
+    .recipe-list { display: flex; flex-direction: column; gap: 8px; }
+    .recipe-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--soft2); border: 1px solid var(--line);
+      border-radius: 12px; padding: 10px 14px;
+    }
+    .recipe-name { font-weight: 700; font-size: 15px; }
+    .recipe-meta { color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .recipe-actions { display: flex; gap: 6px; flex-shrink: 0; margin-left: 10px; }
+    .empty-msg { color: var(--muted); font-size: 14px; text-align: center; padding: 16px 0; }
+    .add-recipe-form {
+      display: none; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap;
+    }
+    .add-recipe-form.show { display: flex; }
+    .add-recipe-form input { flex: 1; min-width: 160px; }
+    .add-recipe-form button { flex-shrink: 0; width: auto; }
+
+    .hint { font-size: 13px; color: var(--muted); }
+    .status-ok { color: var(--ok); font-weight: 700; }
+    .status-warn { color: var(--warn); font-weight: 700; }
+    .footer { color: var(--muted); text-align: center; font-size: 13px; padding: 8px 0 20px; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>咖啡沖煮計時器</h1>
+  <div class="sub">支援蛋糕/錐形濾杯，每段分開設定「注水時間」和「悶蒸時間」，可儲存多組自訂配方。</div>
+
+  <!-- ① 模式與基本參數 -->
+  <div class="card">
+    <div class="mode-buttons">
+      <button id="modeFlat" class="mode-btn active">蛋糕濾杯</button>
+      <button id="modeCone" class="mode-btn">錐形濾杯</button>
+    </div>
+    <div class="grid g4" style="margin-top:12px;">
+      <div><label>粉量（g）</label><input id="coffeeDose" type="number" step="0.1"></div>
+      <div><label>總水量（g）</label><input id="totalWater" type="number" step="1"></div>
+      <div><label>建議段數</label><input id="stageCountView" type="text" readonly></div>
+      <div><label>目前模式</label><input id="modeView" type="text" readonly></div>
+    </div>
+    <div class="grid g3" style="margin-top:12px;">
+      <button id="resetPresetBtn" class="ghost">恢復此模式預設</button>
+      <button id="saveBtn" class="secondary">儲存目前設定</button>
+      <button id="loadBtn" class="ghost">載入已儲存設定</button>
+    </div>
+  </div>
+
+  <!-- ② 計時器 -->
+  <div class="card">
+    <div class="timer" id="mainTimer">00:00</div>
+    <div class="stage-title" id="currentStageTitle">尚未開始</div>
+    <div class="phase-badge"><span class="badge idle" id="phaseBadge">等待開始</span></div>
+    <div class="stage-desc" id="currentStageDesc">先調整你要的注水段落，再按開始。</div>
+    <div class="progress"><div class="bar overall" id="progressBar"></div></div>
+    <div class="progress thin"><div class="bar" id="phaseBar"></div></div>
+    <div class="grid g3">
+      <button id="startBtn">開始</button>
+      <button id="pauseBtn" class="secondary">暫停</button>
+      <button id="resetBtn" class="ghost">重設</button>
+    </div>
+    <div class="pills">
+      <div class="pill" id="pillMode">模式：蛋糕濾杯</div>
+      <div class="pill" id="pillTotal">總目標：300 g</div>
+      <div class="pill" id="pillCurrent">目前累積：0 g</div>
+      <div class="pill" id="pillStage">目前段數：0 / 4</div>
+      <div class="pill" id="pillTotalTime">總時間：00:00</div>
+    </div>
+    <div class="hint" id="statusText" style="margin-top:10px;">狀態：等待開始</div>
+  </div>
+
+  <!-- ③ 每段設定 -->
+  <div class="card">
+    <div class="section-title">每段設定（可直接改）</div>
+    <div class="hint" style="margin-bottom:10px;">
+      每段分為「注水時間」（倒水的秒數）和「悶蒸時間」（靜置等待的秒數），計時器會分別顯示目前是哪個階段。
+    </div>
+    <div id="validationMsg" class="hint" style="margin-bottom:10px;"></div>
+    <div id="stagesContainer"></div>
+    <div class="add-stage-wrap">
+      <button id="addStageBtn" class="ghost small" style="width:auto;padding:8px 20px;">＋ 新增段落</button>
+    </div>
+  </div>
+
+  <!-- ④ 我的配方 -->
+  <div class="card">
+    <div class="section-title">我的配方</div>
+    <div class="hint" style="margin-bottom:10px;">可以把目前設定另存為配方，方便下次快速切換。</div>
+    <div id="recipeList" class="recipe-list"></div>
+    <div style="margin-top:10px;">
+      <button id="showSaveRecipeBtn" class="secondary small" style="width:auto;">另存為配方…</button>
+    </div>
+    <div class="add-recipe-form" id="addRecipeForm">
+      <input id="recipeNameInput" type="text" placeholder="輸入配方名稱，例如：比賽濾杯 15g">
+      <button id="confirmSaveRecipe" class="small">儲存</button>
+      <button id="cancelSaveRecipe" class="small ghost">取消</button>
+    </div>
+  </div>
+
+  <!-- ⑤ 說明 -->
+  <div class="card">
+    <div class="section-title">預設值說明</div>
+    <div class="hint">
+      <b>蛋糕濾杯</b>：20g 粉 / 300g 水，悶蒸段注水 10s + 悶蒸 35s（到 60g），後三段各 30s 注水 + 15s 悶蒸。<br>
+      <b>錐形濾杯</b>：20g 粉 / 280g 水，悶蒸段注水 10s + 悶蒸 30s（到 40g），後三段各 20s 注水 + 10s 悶蒸。<br>
+      計時器的兩條進度條：上方是整體進度，下方（藍色=注水中 / 橙色=悶蒸中）是當段進度。
+    </div>
+  </div>
+
+  <div class="footer">單一 HTML 檔，可直接存在手機裡用瀏覽器打開。v3.0</div>
+</div>
+
+<script>
+// ────────────────────────────────────────────
+// 預設配方
+// ────────────────────────────────────────────
+const PRESETS = {
+  flat: {
+    modeName: '蛋糕濾杯',
+    coffeeDose: 20,
+    totalWater: 300,
+    stages: [
+      { name:'悶蒸',   water:60,  pourDuration:10, bloomDuration:35, note:'小圈悶蒸到 60g' },
+      { name:'第二段', water:160, pourDuration:30, bloomDuration:15, note:'穩定注到 160g'  },
+      { name:'第三段', water:240, pourDuration:25, bloomDuration:20, note:'穩定注到 240g'  },
+      { name:'第四段', water:300, pourDuration:20, bloomDuration:35, note:'最後補到 300g'  }
+    ]
+  },
+  cone: {
+    modeName: '錐形濾杯',
+    coffeeDose: 20,
+    totalWater: 280,
+    stages: [
+      { name:'悶蒸',   water:40,  pourDuration:10, bloomDuration:30, note:'悶蒸到 40g'          },
+      { name:'第一段', water:120, pourDuration:20, bloomDuration:10, note:'再加 80g，注到 120g' },
+      { name:'第二段', water:200, pourDuration:20, bloomDuration:10, note:'再加 80g，注到 200g' },
+      { name:'第三段', water:280, pourDuration:20, bloomDuration:15, note:'再加 80g，注到 280g' }
+    ]
+  }
+};
+
+const STORAGE_KEY  = 'coffee-brew-timer-v3';
+const RECIPES_KEY  = 'coffee-brew-recipes-v3';
+
+let mode             = 'flat';
+let timerId          = null;
+let startTime        = null;
+let pausedElapsed    = 0;
+let running          = false;
+let finished         = false;
+let currentStageIndex = -1;
+
+// ── DOM refs ──
+const modeFlatBtn       = document.getElementById('modeFlat');
+const modeConeBtn       = document.getElementById('modeCone');
+const coffeeDoseEl      = document.getElementById('coffeeDose');
+const totalWaterEl      = document.getElementById('totalWater');
+const stageCountView    = document.getElementById('stageCountView');
+const modeView          = document.getElementById('modeView');
+const stagesContainer   = document.getElementById('stagesContainer');
+const validationMsg     = document.getElementById('validationMsg');
+const mainTimer         = document.getElementById('mainTimer');
+const currentStageTitle = document.getElementById('currentStageTitle');
+const phaseBadge        = document.getElementById('phaseBadge');
+const currentStageDesc  = document.getElementById('currentStageDesc');
+const progressBar       = document.getElementById('progressBar');
+const phaseBar          = document.getElementById('phaseBar');
+const pillMode          = document.getElementById('pillMode');
+const pillTotal         = document.getElementById('pillTotal');
+const pillCurrent       = document.getElementById('pillCurrent');
+const pillStage         = document.getElementById('pillStage');
+const pillTotalTime     = document.getElementById('pillTotalTime');
+const statusText        = document.getElementById('statusText');
+const resetPresetBtn    = document.getElementById('resetPresetBtn');
+const saveBtn           = document.getElementById('saveBtn');
+const loadBtn           = document.getElementById('loadBtn');
+const startBtn          = document.getElementById('startBtn');
+const pauseBtn          = document.getElementById('pauseBtn');
+const resetBtn          = document.getElementById('resetBtn');
+const addStageBtn       = document.getElementById('addStageBtn');
+const recipeList        = document.getElementById('recipeList');
+const showSaveRecipeBtn = document.getElementById('showSaveRecipeBtn');
+const addRecipeForm     = document.getElementById('addRecipeForm');
+const recipeNameInput   = document.getElementById('recipeNameInput');
+const confirmSaveRecipe = document.getElementById('confirmSaveRecipe');
+const cancelSaveRecipe  = document.getElementById('cancelSaveRecipe');
+
+// ────────────────────────────────────────────
+// 工具函式
+// ────────────────────────────────────────────
+function n(v, fallback = 0) {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : fallback;
+}
+function formatTime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  return String(Math.floor(sec / 60)).padStart(2,'0') + ':' + String(sec % 60).padStart(2,'0');
+}
+function beep() {
+  try {
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine'; osc.frequency.value = 880; gain.gain.value = 0.04;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.18);
+  } catch(e) {}
+  if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+}
+
+// ────────────────────────────────────────────
+// 時間計算（注水 + 悶蒸）
+// ────────────────────────────────────────────
+function calcStageTimes(stages) {
+  let t = 0;
+  return stages.map(s => {
+    const stageStart = t;
+    const pourEnd    = t + n(s.pourDuration, 0);
+    const stageEnd   = pourEnd + n(s.bloomDuration, 0);
+    t = stageEnd;
+    return { stageStart, pourEnd, stageEnd };
+  });
+}
+function getTotalTime(stages) {
+  const times = calcStageTimes(stages);
+  return times.length ? times[times.length - 1].stageEnd : 0;
+}
+function getPhaseInfo(elapsed, stages, times) {
+  for (let i = 0; i < stages.length; i++) {
+    const t = times[i];
+    if (elapsed <= t.stageEnd || i === stages.length - 1) {
+      const inPour = elapsed <= t.pourEnd;
+      return {
+        stageIndex: i, phase: inPour ? 'pour' : 'bloom',
+        stageStart: t.stageStart, pourEnd: t.pourEnd, stageEnd: t.stageEnd,
+        phaseStart: inPour ? t.stageStart : t.pourEnd,
+        phaseEnd:   inPour ? t.pourEnd    : t.stageEnd
+      };
+    }
+  }
+  return null;
+}
+
+// ────────────────────────────────────────────
+// 設定存取（單槽）
+// ────────────────────────────────────────────
+function getCurrentConfig() {
+  return { mode, coffeeDose: n(coffeeDoseEl.value, 20), totalWater: n(totalWaterEl.value, 300), stages: collectStages() };
+}
+function saveConfig() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(getCurrentConfig()));
+  statusText.textContent = '狀態：已儲存目前設定';
+}
+function loadSavedConfig() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) { statusText.textContent = '狀態：找不到已儲存設定'; return; }
+  try {
+    const data = JSON.parse(raw);
+    mode = data.mode || 'flat';
+    renderFromData(data); resetTimer();
+    statusText.textContent = '狀態：已載入已儲存設定';
+  } catch(e) { statusText.textContent = '狀態：載入失敗'; }
+}
+
+// ────────────────────────────────────────────
+// 我的配方
+// ────────────────────────────────────────────
+function getRecipes() {
+  try { return JSON.parse(localStorage.getItem(RECIPES_KEY)) || []; } catch(e) { return []; }
+}
+function saveRecipes(arr) { localStorage.setItem(RECIPES_KEY, JSON.stringify(arr)); }
+function addRecipe(name) {
+  const arr = getRecipes();
+  arr.push({ id: Date.now().toString(), name, config: getCurrentConfig() });
+  saveRecipes(arr); renderRecipeList();
+}
+function deleteRecipe(id) { saveRecipes(getRecipes().filter(r => r.id !== id)); renderRecipeList(); }
+function loadRecipe(id) {
+  const r = getRecipes().find(r => r.id === id);
+  if (!r) return;
+  mode = r.config.mode || 'flat';
+  renderFromData(r.config); resetTimer();
+  statusText.textContent = `狀態：已載入配方「${r.name}」`;
+}
+function renderRecipeList() {
+  const arr = getRecipes();
+  if (!arr.length) {
+    recipeList.innerHTML = '<div class="empty-msg">尚無儲存的配方，按下方按鈕新增。</div>';
+    return;
+  }
+  recipeList.innerHTML = '';
+  arr.forEach(r => {
+    const stages    = r.config.stages || [];
+    const totalSec  = getTotalTime(stages);
+    const modeName  = PRESETS[r.config.mode]?.modeName || r.config.mode;
+    const div = document.createElement('div');
+    div.className = 'recipe-item';
+    div.innerHTML = `
+      <div>
+        <div class="recipe-name">${r.name}</div>
+        <div class="recipe-meta">${modeName}｜${r.config.coffeeDose}g 粉 / ${r.config.totalWater}g 水｜${stages.length} 段｜總 ${formatTime(totalSec)}</div>
+      </div>
+      <div class="recipe-actions">
+        <button class="small secondary" data-load="${r.id}">載入</button>
+        <button class="small danger" data-delete="${r.id}">刪除</button>
+      </div>`;
+    recipeList.appendChild(div);
+  });
+  recipeList.querySelectorAll('[data-load]').forEach(btn =>
+    btn.addEventListener('click', () => loadRecipe(btn.dataset.load)));
+  recipeList.querySelectorAll('[data-delete]').forEach(btn =>
+    btn.addEventListener('click', () => { if (confirm('確定要刪除這個配方嗎？')) deleteRecipe(btn.dataset.delete); }));
+}
+
+// ────────────────────────────────────────────
+// 模式 & 畫面渲染
+// ────────────────────────────────────────────
+function setModeButtons() {
+  modeFlatBtn.className = 'mode-btn ' + (mode === 'flat' ? 'active' : '');
+  modeConeBtn.className = 'mode-btn ' + (mode === 'cone' ? 'active' : '');
+}
+function renderFromData(data) {
+  setModeButtons();
+  coffeeDoseEl.value = data.coffeeDose;
+  totalWaterEl.value = data.totalWater;
+  modeView.value     = PRESETS[mode]?.modeName || mode;
+  stageCountView.value = `${(data.stages||[]).length} 段`;
+  pillMode.textContent  = `模式：${PRESETS[mode]?.modeName || mode}`;
+  pillTotal.textContent = `總目標：${n(data.totalWater, 0)} g`;
+  renderStages(data.stages || []);
+}
+function renderPreset() {
+  const p = JSON.parse(JSON.stringify(PRESETS[mode]));
+  renderFromData({ mode, coffeeDose: p.coffeeDose, totalWater: p.totalWater, stages: p.stages });
+}
+
+// ────────────────────────────────────────────
+// 段落渲染 & 操作
+// ────────────────────────────────────────────
+function renderStages(stages) {
+  stagesContainer.innerHTML = '';
+  stages.forEach((s, i) => renderStageCard(s, i));
+  validateStages();
+  updatePills();
+}
+function renderStageCard(s, i) {
+  const card = document.createElement('div');
+  card.className = 'stage-card';
+  card.dataset.index = i;
+  card.innerHTML = `
+    <div class="stage-head">
+      <div class="stage-head-left">
+        <span>第 ${i + 1} 段</span>
+        <span class="stage-timing" id="stageTiming_${i}"></span>
+      </div>
+      <button class="remove-btn" title="刪除此段" data-remove="${i}">×</button>
+    </div>
+    <div class="grid g2">
+      <div><label>段落名稱</label><input class="stage-name" type="text" value="${s.name}"></div>
+      <div><label>備註</label><input class="stage-note" type="text" value="${s.note || ''}"></div>
+    </div>
+    <div class="grid g3" style="margin-top:10px;">
+      <div><label>累積水量（g）</label><input class="stage-water" type="number" step="1" value="${s.water}"></div>
+      <div><label>💧 注水時間（秒）</label><input class="stage-pour" type="number" step="1" min="0" value="${n(s.pourDuration, 0)}"></div>
+      <div><label>☁️ 悶蒸時間（秒）</label><input class="stage-bloom" type="number" step="1" min="0" value="${n(s.bloomDuration, 0)}"></div>
+    </div>`;
+  stagesContainer.appendChild(card);
+  card.querySelector('[data-remove]').addEventListener('click', () => removeStage(i));
+  card.querySelectorAll('input').forEach(el => el.addEventListener('input', onStageInput));
+}
+function onStageInput() { validateStages(); updatePills(); refreshStageTimings(); refreshStageHighlights(); }
+function removeStage(idx) { const s = collectStages(); s.splice(idx, 1); renderStages(s); }
+function addStage() {
+  const s = collectStages();
+  s.push({ name:`第 ${s.length + 1} 段`, water: s.length ? s[s.length-1].water + 60 : 60, pourDuration:20, bloomDuration:10, note:'' });
+  renderStages(s);
+}
+function collectStages() {
+  return [...document.querySelectorAll('.stage-name')].map((el, i) => ({
+    name:         el.value.trim() || `第 ${i+1} 段`,
+    note:         document.querySelectorAll('.stage-note')[i].value.trim(),
+    water:        n(document.querySelectorAll('.stage-water')[i].value, 0),
+    pourDuration: n(document.querySelectorAll('.stage-pour')[i].value, 0),
+    bloomDuration:n(document.querySelectorAll('.stage-bloom')[i].value, 0)
+  }));
+}
+function refreshStageTimings() {
+  const stages = collectStages();
+  const times  = calcStageTimes(stages);
+  stages.forEach((_, i) => {
+    const el = document.getElementById(`stageTiming_${i}`);
+    if (el && times[i]) el.textContent = `${formatTime(times[i].stageStart)} → ${formatTime(times[i].stageEnd)}`;
+  });
+}
+function validateStages() {
+  const stages     = collectStages();
+  const totalWater = n(totalWaterEl.value, 0);
+  let msg = [], ok = true;
+  stages.forEach((s, i) => {
+    if (i > 0 && s.water <= stages[i-1].water) { ok = false; msg.push(`第 ${i+1} 段水量要大於前一段`); }
+    if (s.pourDuration <= 0 && s.bloomDuration <= 0) { ok = false; msg.push(`第 ${i+1} 段總時間不能為 0`); }
+  });
+  if (stages.length && stages[stages.length-1].water !== totalWater) {
+    ok = false; msg.push(`最後一段建議等於總水量 ${totalWater}g`);
+  }
+  validationMsg.innerHTML = ok
+    ? `<span class="status-ok">✓ 設定正常，可以開始</span>`
+    : `<span class="status-warn">⚠ ${msg.join('；')}</span>`;
+  refreshStageTimings();
+  return ok;
+}
+function updatePills() {
+  const stages = collectStages();
+  pillTotal.textContent     = `總目標：${n(totalWaterEl.value, 0)} g`;
+  pillStage.textContent     = `目前段數：${Math.max(currentStageIndex + 1, 0)} / ${stages.length}`;
+  pillTotalTime.textContent = `總時間：${formatTime(getTotalTime(stages))}`;
+  stageCountView.value      = `${stages.length} 段`;
+  modeView.value            = PRESETS[mode]?.modeName || mode;
+  pillMode.textContent      = `模式：${PRESETS[mode]?.modeName || mode}`;
+}
+function refreshStageHighlights() {
+  [...document.querySelectorAll('.stage-card')].forEach((card, i) => {
+    card.classList.remove('current', 'done');
+    if (i < currentStageIndex) card.classList.add('done');
+    if (i === currentStageIndex) card.classList.add('current');
+  });
+}
+
+// ────────────────────────────────────────────
+// 計時器
+// ────────────────────────────────────────────
+function resetTimer() {
+  clearInterval(timerId); timerId = null; startTime = null;
+  pausedElapsed = 0; running = false; finished = false; currentStageIndex = -1;
+  mainTimer.textContent        = '00:00';
+  currentStageTitle.textContent = '尚未開始';
+  phaseBadge.textContent        = '等待開始';
+  phaseBadge.className          = 'badge idle';
+  currentStageDesc.textContent  = '先調整你要的注水段落，再按開始。';
+  progressBar.style.width       = '0%';
+  phaseBar.style.width          = '0%';
+  phaseBar.className            = 'bar';
+  pillCurrent.textContent       = '目前累積：0 g';
+  statusText.textContent        = '狀態：等待開始';
+  updatePills(); refreshStageHighlights();
+}
+
+function setPhaseByElapsed(elapsed) {
+  const stages    = collectStages();
+  if (!stages.length) return;
+  const times     = calcStageTimes(stages);
+  const totalTime = times[times.length - 1].stageEnd || 1;
+
+  // 完成
+  if (elapsed >= totalTime) {
+    finished = true; running = false; clearInterval(timerId);
+    mainTimer.textContent         = formatTime(totalTime);
+    progressBar.style.width       = '100%';
+    phaseBar.style.width          = '100%';
+    currentStageTitle.textContent = '完成 ☕';
+    phaseBadge.textContent        = '已完成';
+    phaseBadge.className          = 'badge idle';
+    currentStageDesc.textContent  = '已到最後時間，可以等濾完。';
+    pillCurrent.textContent       = `目前累積：${stages[stages.length - 1].water} g`;
+    statusText.textContent        = '狀態：已完成';
+    beep(); return;
+  }
+
+  const info = getPhaseInfo(elapsed, stages, times);
+  if (!info) return;
+  const { stageIndex, phase, phaseStart, phaseEnd, stageStart, pourEnd, stageEnd } = info;
+
+  // 換段提示音
+  if (stageIndex !== currentStageIndex) { currentStageIndex = stageIndex; beep(); refreshStageHighlights(); }
+
+  const curr      = stages[stageIndex];
+  const prevWater = stageIndex === 0 ? 0 : stages[stageIndex - 1].water;
+  const phaseDur  = Math.max(phaseEnd - phaseStart, 1);
+  const phaseProgress = Math.min(1, Math.max(0, (elapsed - phaseStart) / phaseDur));
+  const phaseRemaining = Math.max(0, phaseEnd - elapsed);
+
+  // 估算目前水量
+  const currentWater = phase === 'pour'
+    ? prevWater + (curr.water - prevWater) * phaseProgress
+    : curr.water;
+
+  // Badge + 進度條顏色
+  if (phase === 'pour') {
+    phaseBadge.textContent = `💧 注水中　剩 ${formatTime(phaseRemaining)}`;
+    phaseBadge.className   = 'badge pour';
+    phaseBar.className     = 'bar pour-bar';
+  } else {
+    phaseBadge.textContent = `☁️ 悶蒸中　剩 ${formatTime(phaseRemaining)}`;
+    phaseBadge.className   = 'badge bloom';
+    phaseBar.className     = 'bar bloom-bar';
+  }
+  phaseBar.style.width = `${phaseProgress * 100}%`;
+
+  // 其他 UI
+  pillCurrent.textContent       = `目前累積：${Math.round(currentWater)} g`;
+  pillStage.textContent         = `目前段數：${stageIndex + 1} / ${stages.length}`;
+  currentStageTitle.textContent = curr.name;
+  const nextName = stages[stageIndex + 1] ? `下一段：${stages[stageIndex + 1].name}` : '最後一段';
+  currentStageDesc.textContent  = `目標 ${curr.water}g${curr.note ? '｜' + curr.note : ''}｜${nextName}`;
+  progressBar.style.width       = `${Math.min(100, elapsed / totalTime * 100)}%`;
+}
+
+function tick() {
+  const elapsed = (Date.now() - startTime) / 1000;
+  mainTimer.textContent = formatTime(elapsed);
+  setPhaseByElapsed(elapsed);
+  statusText.textContent = '狀態：計時中';
+}
+function startTimer() {
+  if (!validateStages()) return;
+  if (finished) resetTimer();
+  if (running) return;
+  startTime = Date.now() - pausedElapsed * 1000;
+  running = true;
+  timerId = setInterval(tick, 200);
+  tick();
+}
+function pauseTimer() {
+  if (!running) return;
+  pausedElapsed = (Date.now() - startTime) / 1000;
+  clearInterval(timerId); running = false;
+  statusText.textContent = '狀態：已暫停';
+}
+
+// ────────────────────────────────────────────
+// 事件綁定
+// ────────────────────────────────────────────
+modeFlatBtn.addEventListener('click', () => { mode = 'flat'; renderPreset(); resetTimer(); });
+modeConeBtn.addEventListener('click', () => { mode = 'cone'; renderPreset(); resetTimer(); });
+resetPresetBtn.addEventListener('click', () => { renderPreset(); resetTimer(); statusText.textContent = '狀態：已恢復此模式預設'; });
+saveBtn.addEventListener('click', saveConfig);
+loadBtn.addEventListener('click', loadSavedConfig);
+startBtn.addEventListener('click', startTimer);
+pauseBtn.addEventListener('click', pauseTimer);
+resetBtn.addEventListener('click', resetTimer);
+addStageBtn.addEventListener('click', addStage);
+totalWaterEl.addEventListener('input', () => { validateStages(); updatePills(); });
+
+// 配方 UI
+showSaveRecipeBtn.addEventListener('click', () => { addRecipeForm.classList.add('show'); recipeNameInput.focus(); });
+cancelSaveRecipe.addEventListener('click', () => { addRecipeForm.classList.remove('show'); recipeNameInput.value = ''; });
+confirmSaveRecipe.addEventListener('click', () => {
+  const name = recipeNameInput.value.trim();
+  if (!name) { recipeNameInput.focus(); return; }
+  addRecipe(name);
+  addRecipeForm.classList.remove('show'); recipeNameInput.value = '';
+  statusText.textContent = `狀態：已儲存配方「${name}」`;
+});
+recipeNameInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter')  confirmSaveRecipe.click();
+  if (e.key === 'Escape') cancelSaveRecipe.click();
+});
+
+// ────────────────────────────────────────────
+// 初始化
+// ────────────────────────────────────────────
+renderPreset();
+resetTimer();
+renderRecipeList();
+</script>
+</body>
+</html>
