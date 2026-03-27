@@ -162,6 +162,29 @@
     .status-ok { color: var(--ok); font-weight: 700; }
     .status-warn { color: var(--warn); font-weight: 700; }
     .footer { color: var(--muted); text-align: center; font-size: 13px; padding: 8px 0 20px; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      background: #2f2822; color: #fff;
+      padding: 10px 22px; border-radius: 999px;
+      font-size: 14px; font-weight: 600;
+      opacity: 0; transition: opacity .25s, transform .25s;
+      z-index: 9999; pointer-events: none; white-space: nowrap;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* ── Import textarea ── */
+    .import-area { display: none; margin-top: 10px; }
+    .import-area.show { display: block; }
+    .import-area textarea {
+      width: 100%; height: 90px; border-radius: 12px;
+      border: 1px solid var(--line); padding: 10px;
+      font-size: 13px; font-family: monospace; resize: vertical;
+    }
+    .import-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .import-actions button { width: auto; }
   </style>
 </head>
 <body>
@@ -185,6 +208,9 @@
       <button id="resetPresetBtn" class="ghost">恢復此模式預設</button>
       <button id="saveBtn" class="secondary">儲存目前設定</button>
       <button id="loadBtn" class="ghost">載入已儲存設定</button>
+    </div>
+    <div style="margin-top:10px;">
+      <button id="shareConfigBtn" class="secondary small" style="width:auto;">🔗 產生分享連結（目前設定）</button>
     </div>
   </div>
 
@@ -229,13 +255,23 @@
     <div class="section-title">我的配方</div>
     <div class="hint" style="margin-bottom:10px;">可以把目前設定另存為配方，方便下次快速切換。</div>
     <div id="recipeList" class="recipe-list"></div>
-    <div style="margin-top:10px;">
+    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
       <button id="showSaveRecipeBtn" class="secondary small" style="width:auto;">另存為配方…</button>
+      <button id="exportRecipesBtn" class="ghost small" style="width:auto;">📤 匯出全部配方</button>
+      <button id="showImportBtn" class="ghost small" style="width:auto;">📥 匯入配方</button>
     </div>
     <div class="add-recipe-form" id="addRecipeForm">
       <input id="recipeNameInput" type="text" placeholder="輸入配方名稱，例如：比賽濾杯 15g">
       <button id="confirmSaveRecipe" class="small">儲存</button>
       <button id="cancelSaveRecipe" class="small ghost">取消</button>
+    </div>
+    <div class="import-area" id="importArea">
+      <div class="hint" style="margin-bottom:6px;">把從其他裝置複製的配方資料貼進來：</div>
+      <textarea id="importTextarea" placeholder="貼上配方 JSON 資料…"></textarea>
+      <div class="import-actions">
+        <button id="confirmImportBtn" class="small">匯入</button>
+        <button id="cancelImportBtn" class="small ghost">取消</button>
+      </div>
     </div>
   </div>
 
@@ -251,6 +287,7 @@
 
   <div class="footer">單一 HTML 檔，可直接存在手機裡用瀏覽器打開。v3.0</div>
 </div>
+<div class="toast" id="toast"></div>
 
 <script>
 // ────────────────────────────────────────────
@@ -326,6 +363,86 @@ const addRecipeForm     = document.getElementById('addRecipeForm');
 const recipeNameInput   = document.getElementById('recipeNameInput');
 const confirmSaveRecipe = document.getElementById('confirmSaveRecipe');
 const cancelSaveRecipe  = document.getElementById('cancelSaveRecipe');
+const shareConfigBtn    = document.getElementById('shareConfigBtn');
+const exportRecipesBtn  = document.getElementById('exportRecipesBtn');
+const showImportBtn     = document.getElementById('showImportBtn');
+const importArea        = document.getElementById('importArea');
+const importTextarea    = document.getElementById('importTextarea');
+const confirmImportBtn  = document.getElementById('confirmImportBtn');
+const cancelImportBtn   = document.getElementById('cancelImportBtn');
+
+// ────────────────────────────────────────────
+// Toast 通知
+// ────────────────────────────────────────────
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ────────────────────────────────────────────
+// 分享連結（把設定編碼進 URL hash）
+// ────────────────────────────────────────────
+function configToUrl(cfg) {
+  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(cfg))));
+  return location.href.split('#')[0] + '#c=' + encoded;
+}
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    return navigator.clipboard.writeText(text);
+  } else {
+    // fallback for older browsers
+    const el = document.createElement('textarea');
+    el.value = text; el.style.position = 'fixed'; el.style.opacity = '0';
+    document.body.appendChild(el); el.select();
+    document.execCommand('copy'); document.body.removeChild(el);
+    return Promise.resolve();
+  }
+}
+function shareCurrentConfig() {
+  const url = configToUrl(getCurrentConfig());
+  copyToClipboard(url).then(() => showToast('✓ 分享連結已複製，貼到手機開啟即可載入'));
+}
+function loadFromUrlHash() {
+  const hash = location.hash;
+  if (!hash.startsWith('#c=')) return false;
+  try {
+    const cfg = JSON.parse(decodeURIComponent(escape(atob(hash.slice(3)))));
+    mode = cfg.mode || 'flat';
+    renderFromData(cfg); resetTimer();
+    history.replaceState(null, '', location.pathname + location.search);
+    showToast('✓ 已從分享連結載入設定');
+    return true;
+  } catch(e) { return false; }
+}
+
+// ────────────────────────────────────────────
+// 匯出 / 匯入全部配方
+// ────────────────────────────────────────────
+function exportAllRecipes() {
+  const arr = getRecipes();
+  if (!arr.length) { showToast('目前沒有儲存的配方'); return; }
+  copyToClipboard(JSON.stringify(arr))
+    .then(() => showToast(`✓ 已複製 ${arr.length} 個配方資料，貼到其他裝置匯入`));
+}
+function importRecipesFromText(text) {
+  try {
+    const arr = JSON.parse(text);
+    if (!Array.isArray(arr)) throw new Error();
+    const existing   = getRecipes();
+    const existingIds = new Set(existing.map(r => r.id));
+    let added = 0;
+    arr.forEach(r => { if (r.id && r.name && r.config && !existingIds.has(r.id)) { existing.push(r); added++; } });
+    saveRecipes(existing); renderRecipeList();
+    showToast(`✓ 已匯入 ${added} 個配方`);
+    return true;
+  } catch(e) {
+    showToast('✗ 格式錯誤，請確認是從「匯出全部配方」複製的資料');
+    return false;
+  }
+}
 
 // ────────────────────────────────────────────
 // 工具函式
@@ -444,12 +561,19 @@ function renderRecipeList() {
       </div>
       <div class="recipe-actions">
         <button class="small secondary" data-load="${r.id}">載入</button>
+        <button class="small ghost" data-share="${r.id}">🔗</button>
         <button class="small danger" data-delete="${r.id}">刪除</button>
       </div>`;
     recipeList.appendChild(div);
   });
   recipeList.querySelectorAll('[data-load]').forEach(btn =>
     btn.addEventListener('click', () => loadRecipe(btn.dataset.load)));
+  recipeList.querySelectorAll('[data-share]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const r = getRecipes().find(r => r.id === btn.dataset.share);
+      if (!r) return;
+      copyToClipboard(configToUrl(r.config)).then(() => showToast(`✓「${r.name}」分享連結已複製`));
+    }));
   recipeList.querySelectorAll('[data-delete]').forEach(btn =>
     btn.addEventListener('click', () => { if (confirm('確定要刪除這個配方嗎？')) deleteRecipe(btn.dataset.delete); }));
 }
@@ -698,12 +822,31 @@ recipeNameInput.addEventListener('keydown', e => {
   if (e.key === 'Escape') cancelSaveRecipe.click();
 });
 
+// 分享 & 匯出/匯入
+shareConfigBtn.addEventListener('click', shareCurrentConfig);
+exportRecipesBtn.addEventListener('click', exportAllRecipes);
+showImportBtn.addEventListener('click', () => {
+  importArea.classList.add('show');
+  importTextarea.focus();
+});
+cancelImportBtn.addEventListener('click', () => {
+  importArea.classList.remove('show');
+  importTextarea.value = '';
+});
+confirmImportBtn.addEventListener('click', () => {
+  if (importRecipesFromText(importTextarea.value.trim())) {
+    importArea.classList.remove('show');
+    importTextarea.value = '';
+  }
+});
+
 // ────────────────────────────────────────────
 // 初始化
 // ────────────────────────────────────────────
 renderPreset();
 resetTimer();
 renderRecipeList();
+loadFromUrlHash(); // 如果 URL 帶有 #c=... 則自動載入
 </script>
 </body>
 </html>
